@@ -32,6 +32,122 @@ static const YUV2RGBParam YUV2RGB[3] = {
 	YUV2RGB_PARAM(0.2126, 0.0722, 16.0, 235.0, 224.0)
 };
 
+uint8_t clamp(int16_t value)
+{
+	return value < 0 ? 0 : (value > 255 ? 255 : value);
+}
+
+void yuv420_rgb24_std(uint32_t width, uint32_t height, const uint8_t *Y, const uint8_t *U, const uint8_t *V, const uint8_t *A, uint32_t Y_stride, uint32_t U_stride, uint32_t V_stride, uint32_t A_stride, uint8_t *RGBA, uint32_t RGBA_stride, YCbCrType yuv_type)
+{
+	const YUV2RGBParam *const param = &(YUV2RGB[yuv_type]);
+	uint32_t x, y;
+	for (y = 0; y < (height - 1); y += 2)
+	{
+		const uint8_t *y_ptr1 = Y + y * Y_stride,
+			*y_ptr2 = Y + (y + 1) * Y_stride,
+			*u_ptr = U + (y / 2) * U_stride,
+			*v_ptr = V + (y / 2) * V_stride,
+			*a_ptr1 = (A) ? A + y * A_stride : nullptr,
+			*a_ptr2 = (A) ? A + (y + 1) * A_stride : nullptr;
+
+		uint8_t *rgb_ptr1 = RGBA + y * RGBA_stride,
+			*rgb_ptr2 = RGBA + (y + 1) * RGBA_stride;
+
+		for (x = 0; x < (width - 1); x += 2)
+		{
+			int8_t u_tmp, v_tmp;
+			u_tmp = u_ptr[0] - 128;
+			v_tmp = v_ptr[0] - 128;
+
+			//compute Cb Cr color offsets, common to four pixels
+			int16_t b_cb_offset, r_cr_offset, g_cbcr_offset;
+			b_cb_offset = (param->cb_factor*u_tmp) >> 6;
+			r_cr_offset = (param->cr_factor*v_tmp) >> 6;
+			g_cbcr_offset = (param->g_cb_factor*u_tmp + param->g_cr_factor*v_tmp) >> 7;
+
+			int16_t y_tmp;
+			y_tmp = (param->y_factor*(y_ptr1[0] - param->y_offset)) >> 7;
+			rgb_ptr1[0] = clamp(y_tmp + r_cr_offset);
+			rgb_ptr1[1] = clamp(y_tmp - g_cbcr_offset);
+			rgb_ptr1[2] = clamp(y_tmp + b_cb_offset);
+			rgb_ptr1[3] = (a_ptr1) ? *(a_ptr1++) : 255;
+
+			y_tmp = (param->y_factor*(y_ptr1[1] - param->y_offset)) >> 7;
+			rgb_ptr1[4] = clamp(y_tmp + r_cr_offset);
+			rgb_ptr1[5] = clamp(y_tmp - g_cbcr_offset);
+			rgb_ptr1[6] = clamp(y_tmp + b_cb_offset);
+			rgb_ptr1[7] = (a_ptr1) ? *(a_ptr1++) : 255;
+
+			y_tmp = (param->y_factor*(y_ptr2[0] - param->y_offset)) >> 7;
+			rgb_ptr2[0] = clamp(y_tmp + r_cr_offset);
+			rgb_ptr2[1] = clamp(y_tmp - g_cbcr_offset);
+			rgb_ptr2[2] = clamp(y_tmp + b_cb_offset);
+			rgb_ptr2[3] = (a_ptr2) ? *(a_ptr2++) : 255;
+
+			y_tmp = (param->y_factor*(y_ptr2[1] - param->y_offset)) >> 7;
+			rgb_ptr2[4] = clamp(y_tmp + r_cr_offset);
+			rgb_ptr2[5] = clamp(y_tmp - g_cbcr_offset);
+			rgb_ptr2[6] = clamp(y_tmp + b_cb_offset);
+			rgb_ptr2[7] = (a_ptr2) ? *(a_ptr2++) : 255;
+
+			y_ptr1 += 2;
+			y_ptr2 += 2;
+			u_ptr += 1;
+			v_ptr += 1;
+			rgb_ptr1 += 8;
+			rgb_ptr2 += 8;
+		}
+	}
+}
+
+void yuv420_rgb24_extra(int w, int width, const uint8_t *y_ptr1, const uint8_t *y_ptr2, const uint8_t *u_ptr, const uint8_t *v_ptr, const uint8_t *a_ptr1, const uint8_t *a_ptr2, uint8_t* rgb_ptr1, uint8_t* rgb_ptr2, YCbCrType yuv_type)
+{
+	const YUV2RGBParam *const param = &(YUV2RGB[yuv_type]);
+	for (; w < (width - 1); w += 2)
+	{
+		int8_t u_tmp, v_tmp;
+		u_tmp = u_ptr[0] - 128;
+		v_tmp = v_ptr[0] - 128;
+
+		int16_t b_cb_offset, r_cr_offset, g_cbcr_offset;
+		b_cb_offset = (param->cb_factor*u_tmp) >> 6;
+		r_cr_offset = (param->cr_factor*v_tmp) >> 6;
+		g_cbcr_offset = (param->g_cb_factor*u_tmp + param->g_cr_factor*v_tmp) >> 7;
+
+		int16_t y_tmp;
+		y_tmp = (param->y_factor*(y_ptr1[0] - param->y_offset)) >> 7;
+		rgb_ptr1[0] = clamp(y_tmp + r_cr_offset);
+		rgb_ptr1[1] = clamp(y_tmp - g_cbcr_offset);
+		rgb_ptr1[2] = clamp(y_tmp + b_cb_offset);
+		rgb_ptr1[3] = (a_ptr1) ? *(a_ptr1++) : 255;
+
+		y_tmp = (param->y_factor*(y_ptr1[1] - param->y_offset)) >> 7;
+		rgb_ptr1[4] = clamp(y_tmp + r_cr_offset);
+		rgb_ptr1[5] = clamp(y_tmp - g_cbcr_offset);
+		rgb_ptr1[6] = clamp(y_tmp + b_cb_offset);
+		rgb_ptr1[7] = (a_ptr1) ? *(a_ptr1++) : 255;
+
+		y_tmp = (param->y_factor*(y_ptr2[0] - param->y_offset)) >> 7;
+		rgb_ptr2[0] = clamp(y_tmp + r_cr_offset);
+		rgb_ptr2[1] = clamp(y_tmp - g_cbcr_offset);
+		rgb_ptr2[2] = clamp(y_tmp + b_cb_offset);
+		rgb_ptr2[3] = (a_ptr2) ? *(a_ptr2++) : 255;
+
+		y_tmp = (param->y_factor*(y_ptr2[1] - param->y_offset)) >> 7;
+		rgb_ptr2[4] = clamp(y_tmp + r_cr_offset);
+		rgb_ptr2[5] = clamp(y_tmp - g_cbcr_offset);
+		rgb_ptr2[6] = clamp(y_tmp + b_cb_offset);
+		rgb_ptr2[7] = (a_ptr2) ? *(a_ptr2++) : 255;
+
+		y_ptr1 += 2;
+		y_ptr2 += 2;
+		u_ptr += 1;
+		v_ptr += 1;
+		rgb_ptr1 += 8;
+		rgb_ptr2 += 8;
+	}
+}
+
 #define LOAD_SI128 _mm_load_si128
 #define SAVE_SI128 _mm_stream_si128
 
@@ -89,7 +205,8 @@ void yuv420_rgb24_sse(uint32_t width, uint32_t height, const uint8_t *Y, const u
 		uint8_t *rgba_ptr1 = RGBA + (h * RGBA_stride);
 		uint8_t *rgba_ptr2 = RGBA + ((h + 1) * RGBA_stride);
 
-		for (uint32_t w = 0; w < (width - 31); w += 32)
+		uint32_t w = 0;
+		for (; w < (width - 31); w += 32)
 		{
 			__m128i u = LOAD_SI128((const __m128i*)(u_ptr));
 			__m128i v = LOAD_SI128((const __m128i*)(v_ptr));
@@ -211,73 +328,8 @@ void yuv420_rgb24_sse(uint32_t width, uint32_t height, const uint8_t *Y, const u
 			u_ptr += 16;
 			v_ptr += 16;
 		}
-	}
-}
 
-uint8_t clamp(int16_t value)
-{
-	return value < 0 ? 0 : (value > 255 ? 255 : value);
-}
-
-void yuv420_rgb24_std(uint32_t width, uint32_t height, const uint8_t *Y, const uint8_t *U, const uint8_t *V, const uint8_t *A, uint32_t Y_stride, uint32_t U_stride, uint32_t V_stride, uint32_t A_stride, uint8_t *RGBA, uint32_t RGBA_stride, YCbCrType yuv_type)
-{
-	const YUV2RGBParam *const param = &(YUV2RGB[yuv_type]);
-	uint32_t x, y;
-	for (y = 0; y < (height - 1); y += 2)
-	{
-		const uint8_t *y_ptr1 = Y + y * Y_stride,
-			*y_ptr2 = Y + (y + 1) * Y_stride,
-			*u_ptr = U + (y / 2) * U_stride,
-			*v_ptr = V + (y / 2) * V_stride,
-			*a_ptr1 = (A) ? A + y * A_stride : nullptr,
-			*a_ptr2 = (A) ? A + (y + 1) * A_stride : nullptr;
-
-		uint8_t *rgb_ptr1 = RGBA + y * RGBA_stride,
-			*rgb_ptr2 = RGBA + (y + 1) * RGBA_stride;
-
-		for (x = 0; x < (width - 1); x += 2)
-		{
-			int8_t u_tmp, v_tmp;
-			u_tmp = u_ptr[0] - 128;
-			v_tmp = v_ptr[0] - 128;
-
-			//compute Cb Cr color offsets, common to four pixels
-			int16_t b_cb_offset, r_cr_offset, g_cbcr_offset;
-			b_cb_offset = (param->cb_factor*u_tmp) >> 6;
-			r_cr_offset = (param->cr_factor*v_tmp) >> 6;
-			g_cbcr_offset = (param->g_cb_factor*u_tmp + param->g_cr_factor*v_tmp) >> 7;
-
-			int16_t y_tmp;
-			y_tmp = (param->y_factor*(y_ptr1[0] - param->y_offset)) >> 7;
-			rgb_ptr1[0] = clamp(y_tmp + r_cr_offset);
-			rgb_ptr1[1] = clamp(y_tmp - g_cbcr_offset);
-			rgb_ptr1[2] = clamp(y_tmp + b_cb_offset);
-			rgb_ptr1[3] = (a_ptr1) ? *(a_ptr1++) : 255;
-
-			y_tmp = (param->y_factor*(y_ptr1[1] - param->y_offset)) >> 7;
-			rgb_ptr1[4] = clamp(y_tmp + r_cr_offset);
-			rgb_ptr1[5] = clamp(y_tmp - g_cbcr_offset);
-			rgb_ptr1[6] = clamp(y_tmp + b_cb_offset);
-			rgb_ptr1[7] = (a_ptr1) ? *(a_ptr1++) : 255;
-
-			y_tmp = (param->y_factor*(y_ptr2[0] - param->y_offset)) >> 7;
-			rgb_ptr2[0] = clamp(y_tmp + r_cr_offset);
-			rgb_ptr2[1] = clamp(y_tmp - g_cbcr_offset);
-			rgb_ptr2[2] = clamp(y_tmp + b_cb_offset);
-			rgb_ptr2[3] = (a_ptr2) ? *(a_ptr2++) : 255;
-
-			y_tmp = (param->y_factor*(y_ptr2[1] - param->y_offset)) >> 7;
-			rgb_ptr2[4] = clamp(y_tmp + r_cr_offset);
-			rgb_ptr2[5] = clamp(y_tmp - g_cbcr_offset);
-			rgb_ptr2[6] = clamp(y_tmp + b_cb_offset);
-			rgb_ptr2[7] = (a_ptr2) ? *(a_ptr2++) : 255;
-
-			y_ptr1 += 2;
-			y_ptr2 += 2;
-			u_ptr += 1;
-			v_ptr += 1;
-			rgb_ptr1 += 8;
-			rgb_ptr2 += 8;
-		}
+		// width의 남은 픽셀은 그냥 계산
+		yuv420_rgb24_extra(w, width, y_ptr1, y_ptr2, u_ptr, v_ptr, a_ptr1, a_ptr2, rgba_ptr1, rgba_ptr2, yuv_type);
 	}
 }
