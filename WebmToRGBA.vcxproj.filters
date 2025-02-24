@@ -68,5 +68,8 @@
     <ClCompile Include="YUVtoRGB.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="YUVtoRGB_AVX2.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

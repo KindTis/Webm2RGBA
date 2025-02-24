@@ -1,5 +1,4 @@
 #include "WebmDecoder.h"
-#include "YUVtoRGB.h"
 
 #include <assert.h>
 #include <chrono>
@@ -8,6 +7,7 @@
 #include <stdio.h>
 #include <chrono>
 #include <stdarg.h>
+#include <iostream>
 
 #ifdef _DEBUG
 #pragma comment(lib, "./lib/libvpxd.lib")
@@ -32,9 +32,14 @@ void OutputDebugTrace(char* lpszFormat, ...)
 	va_end(args);
 }
 
-WebmDecoder::WebmDecoder() : mAccumTime(0), mUsingSSE(false)
+WebmDecoder::WebmDecoder() : mAccumTime(0), mUsingSSE(false), mUsingAVX(false)
 {
+	int cpuInfo[4];
+	__cpuid(cpuInfo, 1);
+	mUsingSSE = ((cpuInfo[3] >> 26) & 1) != 0;
 
+	__cpuid(cpuInfo, 7);
+	mUsingAVX = (cpuInfo[1] & (1 << 5)) != 0;
 }
 
 WebmDecoder::~WebmDecoder()
@@ -79,9 +84,20 @@ bool WebmDecoder::Load(const std::string &fileName, bool loop, float frameRate /
 	mCTX.is_play_loop = loop;
 	mCTX.begin_timestamp_ms = _GetTime();
 
-	int info[4];
-	__cpuid(info, 1);
-	mUsingSSE = ((info[3] >> 26) & 1) != 0;
+	YUVtoRGBAFunc = [this]() -> YUVtoRGBAFunc_t {
+		if (mUsingAVX)
+		{
+			std::cout << "Decode Function: AVX2" << std::endl;
+			return yuv420_rgb24_avx;
+		}
+		if (mUsingSSE)
+		{
+			std::cout << "Decode Function: SSE2" << std::endl;
+			return yuv420_rgb24_sse;
+		}
+		std::cout << "Decode Function: Standard" << std::endl;
+		return yuv420_rgb24_std;
+		}();
 
 	return true;
 }
@@ -361,14 +377,7 @@ void WebmDecoder::_ConvertToRGBA()
 	const int strideV = mCTX.img->stride[VPX_PLANE_V];
 	const int strideA = (mCTX.img_alpha) ? mCTX.img_alpha->stride[VPX_PLANE_Y] : 0;
 
-	if (mUsingSSE)
-	{
-		yuv420_rgb24_sse(width, height, y, u, v, a, strideY, strideU, strideV, strideA, mCTX.pixels, width * 4, YCBCR_JPEG);
-	}
-	else
-	{
-		yuv420_rgb24_std(width, height, y, u, v, a, strideY, strideU, strideV, strideA, mCTX.pixels, width * 4, YCBCR_JPEG);
-	}
+	YUVtoRGBAFunc(width, height, y, u, v, a, strideY, strideU, strideV, strideA, mCTX.pixels, width * 4, YCBCR_JPEG);
 }
 
 uint64_t WebmDecoder::_GetTime()

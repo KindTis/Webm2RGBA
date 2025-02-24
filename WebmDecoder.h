@@ -8,6 +8,7 @@
 #include <mkvparser.h>
 #include <mkvreader.h>
 #include <mkvmuxer.h>
+#include "YUVtoRGB.h"
 
 #define SAFE_DELETE(p)       { if(p) { delete (p);     (p)=NULL; } }
 #define SAFE_DELETE_ARRAY(p) { if(p) { delete[] (p);   (p)=NULL; } }
@@ -156,4 +157,11 @@ private:
 	webm_context mCTX;
 	long mAccumTime;
 	bool mUsingSSE;
+	bool mUsingAVX;
+
+	using YUVtoRGBAFunc_t = void(*)(uint32_t, uint32_t,
+		const uint8_t*, const uint8_t*, const uint8_t*, const uint8_t*,
+		uint32_t, uint32_t, uint32_t, uint32_t,
+		uint8_t*, uint32_t, YCbCrType);
+	YUVtoRGBAFunc_t YUVtoRGBAFunc;
 };
